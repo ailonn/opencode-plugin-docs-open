@@ -1,0 +1,40 @@
+{
+  "name": "opencode-plugin-docs-open",
+  "version": "0.4.0",
+  "description": "OpenCode plugin: documents cited in a session open with one click — clickable doc paths in running text + /docs dialog (xdg-open).",
+  "type": "module",
+  "packageManager": "pnpm@10.33.2",
+  "exports": {
+    ".": "./src/server.ts",
+    "./tui": "./src/tui.ts"
+  },
+  "files": [
+    "src"
+  ],
+  "scripts": {
+    "test": "vitest run",
+    "test:harness": "bun test test/harness",
+    "typecheck": "tsc --noEmit"
+  },
+  "dependencies": {
+    "@opencode/plugin": "^2.2.1"
+  },
+  "peerDependencies": {
+    "@opentui/core": ">=0.6.6"
+  },
+  "pnpm": {
+    "onlyBuiltDependencies": [
+      "bun",
+      "esbuild"
+    ]
+  },
+  "devDependencies": {
+    "@opencode/client": "^2.2.5",
+    "@opencode/theme": "^2.2.1",
+    "@opentui/core": "0.8.2",
+    "@types/node": "^22.0.0",
+    "bun": "^1.4.4",
+    "typescript": "^5.6.0",
+    "vitest": "^3.0.0"
+  }
+}

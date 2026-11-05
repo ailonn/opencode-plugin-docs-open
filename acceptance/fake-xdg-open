@@ -1,0 +1,22 @@
+#!/bin/sh
+# Fake xdg-open — manual acceptance of the opencode-docs plugin (spec AC-2 / AC-3).
+#
+# Log each call in $FAKE_XDG_OPEN_LOG (default /tmp/fake-xdg-open.log):
+#   line 1: call argc=<n>
+#   then:   one argument per line, verbatim (character-exact for path assertions)
+#   then:   ---
+#
+# Usage (head of PATH, then one real session in the TUI):
+#   FAKE_XDG_OPEN_LOG=/tmp/docs-accept.log PATH="$(pwd):$PATH" opencode
+# then: /docs → select a document → check the log:
+#   - exactly one argument (no shell splitting)
+#   - the path verbatim, spaces/accents/apostrophes intact
+
+LOG="${FAKE_XDG_OPEN_LOG:-/tmp/fake-xdg-open.log}"
+{
+  printf 'call argc=%d\n' "$#"
+  for a in "$@"; do
+    printf '%s\n' "$a"
+  done
+  printf -- '---\n'
+} >> "$LOG"
