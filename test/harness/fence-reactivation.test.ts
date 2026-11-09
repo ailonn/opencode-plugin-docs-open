@@ -1,22 +1,25 @@
 /**
- * D2a contract (2026-11-04, decision "fence-passthrough") —
- * the `doc` fence is passthrough: the plugin registers NO custom code block
- * renderer.
+ * D13 contract (2026-11-05, decision "renderer-reactivation") — the `doc`
+ * fence is rendered by the plugin's custom renderer again.
  *
- * Why: the host parents plugin renderables in its own tree, and its `remove`
- * does a strict `instanceof` of its own Renderable class (extracted from the
- * host 2.2.5 binary; the latest core 0.8.2 ships the same check) — a plugin
- * with its own `@opentui/core` copy crashes the host on every block
- * replacement (every token change during streaming): "remove expects a
- * renderable child object". The host's own core is unreachable from a plugin
- * (the `opentui:runtime-module:` scheme is not served by the runtime loader —
- * probe-verified). So the fence renders as the host's standard code block,
- * and its doc lines stay clickable through the v3 root click layer (verified
- * in production — acceptance A4).
+ * D2a history: the custom renderer crashed the host on block replacement —
+ * the host's `remove` does a strict `instanceof` of its own Renderable
+ * class, and the nested TUI adapters loaded natively (their `.js` import
+ * specifiers resolve to a path that does not exist on disk — the host's
+ * rewrite covers only the entry file) resolved `@opentui/core` to the
+ * plugin's own copy. D13 fix: the nested TUI imports carry the `.ts`
+ * spelling (the path exists on disk → the host rewrite covers them →
+ * single host core). The passthrough (D9) remains the documented fallback.
+ *
+ * The first two tests are the wiring-level contract of the reactivation,
+ * including the D2a regression guard (`.ts` specifiers). The double-instance
+ * crash itself is only visible in a real TUI — the harness's test renderer
+ * is the plugin's own core copy (no cross-copy there): TUI re-acceptance,
+ * each host bump.
  *
  * These tests run the real `tui.ts` `setup` with a test renderer and a fake
  * plugin context: the wiring-level contract (the adapters and the click
- * policy are covered by their own suites). The second test drives a real
+ * policy are covered by their own suites). The third test drives a real
  * mouse click through the full chain and catches the spawn with the
  * acceptance `fake-xdg-open` on PATH — the same practice as the manual
  * acceptance. Bun only — the OpenTUI native FFI is unavailable on node.
@@ -34,15 +37,20 @@ setDefaultTimeout(30000)
 
 const FAKE_XDG_OPEN = resolve(import.meta.dir, "../../acceptance/fake-xdg-open")
 
+/** The TUI adapters the entry must import with the `.ts` spelling (D2a/D13). */
+const TUI_ADAPTERS = ["doc-block", "opentui-root-click", "opentui-screen-reader"]
+
 /**
  * Minimal fake plugin context — only the fields `setup` touches:
- * `renderer` (the real test renderer), `keymap.layer`, `markdown.registerCodeBlockRenderer`
- * (spied), `options`, `data.session` (the click closure reads the working
- * directory from it). `ui` is not invoked on the success path.
+ * `renderer` (the real test renderer), `keymap.layer`,
+ * `markdown.registerCodeBlockRenderer` (spied — language + render fn),
+ * `options`, `data.session` (the click closure reads the working
+ * directory from it), `theme` (the renderer reads the link/muted colors).
+ * `ui` is not invoked on the success path.
  */
 function fakeContext(
   renderer: { readonly root: { add: (r: unknown) => void; onMouseUp: unknown } },
-  registered: string[],
+  registered: Record<string, unknown>,
 ) {
   return {
     renderer,
@@ -53,8 +61,8 @@ function fakeContext(
     },
     keymap: { layer: (fn: () => unknown) => fn() },
     markdown: {
-      registerCodeBlockRenderer: (language: string) => {
-        registered.push(language)
+      registerCodeBlockRenderer: (language: string, render: unknown) => {
+        registered[language] = render
       },
     },
     options: {},
@@ -68,23 +76,34 @@ function fakeContext(
   } as never
 }
 
-describe("fence passthrough (D2a — no custom code block renderer)", () => {
-  test("setup registers no custom code block renderer (a registered one crashes the host)", async () => {
+describe("fence reactivation (D13 — custom renderer registered, .ts nested specifiers)", () => {
+  test("setup registers the custom renderer for the `doc` fence", async () => {
     const setup = await createTestRenderer({ width: 80, height: 24 })
     try {
-      const registered: string[] = []
+      const registered: Record<string, unknown> = {}
       const detach = await plugin.setup(fakeContext(setup.renderer, registered))
-      expect(registered, "D2a: a registered custom renderer crashes the host on block replacement").toEqual([])
+      expect(Object.keys(registered), "D13: the custom renderer is registered again").toEqual(["doc"])
+      expect(typeof registered["doc"]).toBe("function")
       if (typeof detach === "function") await detach()
     } finally {
       await setup.dispose()
     }
   })
 
-  test("a left click on a doc line opens it through the root click layer (the passthrough wiring)", async () => {
+  test("the TUI entry imports the TUI adapters with the .ts spelling (D2a: a .js specifier resolves a nonexistent path → native load → double core → crash)", () => {
+    const src = readFileSync(resolve(import.meta.dir, "../../src/tui.ts"), "utf8")
+    for (const name of TUI_ADAPTERS) {
+      expect(
+        src,
+        `src/tui.ts must import ./adapters/${name}.ts (the .js spelling loads the file natively — D2a crash)`,
+      ).toContain(`from "./adapters/${name}.ts"`)
+    }
+  })
+
+  test("a left click on a doc line in running text opens it through the root click layer", async () => {
     // A real document on disk (the fs probe is the real existsSync) and a
     // fake xdg-open at the head of PATH (the spawn is real, the open is not).
-    const dir = mkdtempSync(join(tmpdir(), "docs-passthrough-"))
+    const dir = mkdtempSync(join(tmpdir(), "docs-reactivation-"))
     const doc = join(dir, "a.md")
     writeFileSync(doc, "ok")
     const log = join(dir, "xdg.log")
@@ -99,12 +118,12 @@ describe("fence passthrough (D2a — no custom code block renderer)", () => {
     process.env.FAKE_XDG_OPEN_LOG = log
     const setup = await createTestRenderer({ width: 80, height: 24 })
     try {
-      // A rendered row carrying the doc path — whatever renders it in the
-      // real TUI (running text or the host's standard code block for a `doc`
-      // fence), the root layer sees the same screen buffer.
+      // A rendered row carrying the doc path in running text — the root
+      // layer sees the screen buffer (the fence case is covered by the
+      // renderer's own harness, test/harness/doc-block.test.ts).
       setup.renderer.root.add(new TextRenderable(setup.renderer, { content: `voir ${doc} ok` }))
       await setup.renderOnce()
-      const detach = await plugin.setup(fakeContext(setup.renderer, []))
+      const detach = await plugin.setup(fakeContext(setup.renderer, {}))
       const row = setup.captureCharFrame().split("\n")[0]
       const at = row.indexOf(doc)
       expect(at).toBeGreaterThan(0)

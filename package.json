@@ -1,6 +1,6 @@
 {
   "name": "opencode-plugin-docs-open",
-  "version": "0.4.1",
+  "version": "0.5.0",
   "description": "OpenCode plugin: documents cited in a session open with one click — clickable doc paths in running text + /docs dialog (xdg-open).",
   "type": "module",
   "packageManager": "pnpm@10.33.2",

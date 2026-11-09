@@ -63,10 +63,12 @@ docs/file.md
 — **paths relative to your working directory are preferred** (absolute or `~/` only
 when the file is outside it), which is exactly what the TUI can resolve and open.
 
-The fence renders as the host's **standard code block** — passthrough on purpose
-(see Limitations for why). Its document lines open with a **single plain left click**,
-through the same root click layer as running text: non-document lines are inert, and
-the same guards apply (above). A fence without any document line is plain inert text.
+The fence renders with a **custom renderer**: document lines in link style (theme
+`markdown.linkText`, full width, underlined on hover), non-document lines in muted
+text. Document lines open with a **single plain left click** — the renderer's handler
+owns the release (`stopPropagation`), so the host's root click layer does not
+re-open the same path. A fence without any document line falls back to the host's
+standard code block rendering.
 
 ### Opening
 
@@ -76,22 +78,33 @@ viewer's **exit**: a non-zero exit is reported with an error toast carrying the 
 code, as are a signal kill and a spawn failure (viewer missing). The viewer is
 spawned detached — it survives the TUI.
 
-## Limitations (v0.4.0)
+## Limitations (v0.5.0)
 
 - A path wrapped over two lines is not clickable (the candidate is per rendered line).
 - A path containing spaces is not clickable (the candidate token stops at the space —
   in running text as in `doc` fences).
-- No hover affordance: the single left click is the affordance.
-- `doc` fences render as the host's standard code block: no link styling, and on
-  opencode 2.2.5 standard code blocks carry **no visual marker** (no language label,
-  border or distinct color) — a `doc` block is visually indistinguishable from
-  indented text. Re-tested at each host bump.
-- Why no styled fence: a plugin-provided custom code-block renderer is parented in
-  the host's own render tree, and the host destroys replaced blocks with a strict
-  `instanceof` check against its own `Renderable` class — a plugin ships its own
-  `@opentui/core` copy, so every token change while streaming crashed the TUI (known
-  host bug family `anomalyco/opencode` #43693 / #43696). A styled fence returns only
-  when the host serves its own core to plugins.
+- Hover affordance: `doc` fence document lines underline on hover; in running text
+  the single left click is the affordance.
+- **Host 2.2.5 / 2.2.6 — fence hover not delivered**: the host dispatches no
+  mouse-move (hover) events to the plugin's fence lines (the underline never
+  engages), while clicks on the same lines work — verified on 2.2.5 and re-tested
+  on 2.2.6 (both block moves from reaching the plugin's fence lines). The hover
+  contract is covered by the plugin's test harness; TUI-level hover depends on
+  the host's mouse dispatch. Re-tested at each host bump.
+- **Host 2.2.5 — SGR mouse parser**: some scripted mouse-move sequences leak
+  their tail into the composer as literal text (state-dependent pattern;
+  physical mouse input is unaffected). Not reproduced on 2.2.6 — re-tested at
+  each host bump.
+- **Styled fence (v0.5.0)**: the custom renderer is back. The v0.4.0 crash — the host
+  destroying replaced blocks with a strict `instanceof` against its own `Renderable`
+  class while the plugin ran on its own `@opentui/core` copy (host bug family
+  `anomalyco/opencode` #43693 / #43696, rework discussed in #62051) — is avoided by
+  spelling the TUI imports so the host's runtime loader rewrite covers the plugin's
+  nested imports: a single host core instance, no crash while streaming (regression
+  covered by the harness). The fix depends on the host's loader behavior — re-tested
+  at each host bump; the v0.4.0 passthrough remains the documented fallback. In the
+  **default theme** `markdown.linkText` resolves to the body-text color, so document
+  lines are distinguished by the hover underline and the click, not by color.
 - **Host 2.2.5 — "Message Actions" menu**: a left click inside a **user** message
   box opens the host's context menu (Search / Jump / Revert / Copy / Fork); the
   clicks that land under the open menu are mostly swallowed, so opening a path in

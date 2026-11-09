@@ -2,6 +2,40 @@
 
 All notable changes to `opencode-plugin-docs-open` are documented here.
 
+## v0.5.0 — 2026-11-06
+
+### Added
+
+- **Styled `doc` fences are back (renderer reactivation)**: fence document lines
+  render in link style (theme `markdown.linkText`, full width, underlined on
+  hover), non-document lines in muted text. Document lines open with a single
+  plain left click — the renderer's handler owns the release (`stopPropagation`),
+  so the host's root click layer does not re-open the same path. A fence without
+  any document line falls back to the host's standard code block rendering.
+  The v0.4.0 passthrough (plain standard code block) is retired as the default.
+
+### Fixed
+
+- **TUI crash on streamed fences (opencode 2.2.5)**: the plugin's TUI imports are
+  spelled so the host's runtime loader rewrite covers them — the plugin now runs
+  on the host's own `@opentui/core` copy, so block replacement/destroy while
+  streaming no longer trips the host's strict `instanceof` check (host bug
+  family `anomalyco/opencode` #43693 / #43696, rework discussed in #62051).
+  Regression covered by the test harness.
+
+### Notes
+
+- Verified on opencode 2.2.5 and 2.2.6 (acceptation C1–C7, re-run at the
+  2.2.5 → 2.2.6 bump): streamed fence renders without crash, doc lines open
+  with exactly one `xdg-open` call (no double open), non-doc lines stay inert,
+  the `/docs` dialog opens session documents.
+- In the **default theme** `markdown.linkText` resolves to the body-text color —
+  fence document lines are distinguished by the hover underline and the click,
+  not by color.
+- Host 2.2.5 and 2.2.6: mouse-move (hover) events are not dispatched to the
+  plugin's fence lines (clicks are) — the underline contract is harness-covered;
+  re-test at each host bump.
+
 ## v0.4.1 — 2026-11-05
 
 ### Added
